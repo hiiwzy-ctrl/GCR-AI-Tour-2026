@@ -7,50 +7,10 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
 
 jobs:
-  run-mock:
-    # PRs (especially from forks) typically don't have access to repo Variables/Secrets.
-    # Keep PR verification cheap and reliable.
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-          cache: pip
-          cache-dependency-path: requirements.txt
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Run workflow (mock agents)
-        env:
-          RUN_OUT: output/ci-${{ github.run_id }}-${{ github.run_attempt }}
-        run: |
-          cd generated/social_insight_workflow
-          python run.py --non-interactive --mock-agents --set Local.RunOutputDir=${RUN_OUT}
-          echo "Wrote outputs to ${RUN_OUT}"
-
-      - name: Upload outputs
-        uses: actions/upload-artifact@v4
-        with:
-          name: social-insight-output
-          path: |
-            output/ci-${{ github.run_id }}-${{ github.run_attempt }}/
-            output/ci-${{ github.run_id }}-${{ github.run_attempt }}/report.md
-          if-no-files-found: error
-
   run-azure-ai:
     # Default: run on push to main and on manual dispatch.
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
@@ -131,8 +91,35 @@ jobs:
           RUN_OUT: output/ci-azure-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           cd generated/social_insight_workflow
-          python run.py --non-interactive --azure-ai --set Local.RunOutputDir=${RUN_OUT}
+          python run.py --non-interactive --azure-ai --azure-ai-verbose --set Local.RunOutputDir=${RUN_OUT}
           echo "Wrote outputs to ${RUN_OUT}"
+
+      - name: Update frontend/report.md
+        shell: bash
+        env:
+          RUN_OUT: output/ci-azure-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          src="${RUN_OUT}/report.md"
+          if [[ ! -f "$src" ]]; then
+            echo "Missing report: $src" >&2
+            exit 1
+          fi
+          cp "$src" frontend/report.md
+
+      - name: Commit and push frontend update
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- frontend/report.md; then
+            echo "No frontend changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add frontend/report.md
+          git commit -m "chore: update frontend report"
+          git push
 
       - name: Upload outputs (Azure)
         uses: actions/upload-artifact@v4
