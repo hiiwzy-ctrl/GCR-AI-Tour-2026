@@ -89,7 +89,27 @@ cat generated/social_insight_output/insights/insights.json | jq .
 
 ### 快速答案
 
-推荐使用 Azure CLI 认证（最简单）：
+**生产环境（Azure 部署）**: 使用 Managed Identity（推荐）
+
+```bash
+# 1. 启用 Managed Identity
+az vm identity assign --name "your-vm" --resource-group "your-rg"
+
+# 2. 授予权限
+az role assignment create \
+    --assignee <managed-identity-principal-id> \
+    --role "Cognitive Services User" \
+    --scope /subscriptions/{sub}/resourceGroups/{rg}
+
+# 3. 设置环境变量
+export AZURE_AI_PROJECT_ENDPOINT=https://your-project.api.azureml.ms
+export AZURE_AI_MODEL_DEPLOYMENT_NAME=gpt-4
+
+# 4. 运行（无需 az login）
+./scripts/test_e2e.sh azure
+```
+
+**本地开发**: 使用 Azure CLI（最简单）
 
 ```bash
 # 1. 登录 Azure
@@ -108,9 +128,78 @@ cp .env.example .env
 
 ### 详细说明
 
-我们支持 **3 种认证方法**，适用于不同场景：
+我们支持 **4 种认证方法**，适用于不同场景：
 
-#### 方法 1: Azure CLI（推荐用于本地开发）
+#### 方法 1: Managed Identity（推荐生产环境）
+
+**优点**: 
+- ✅ 最安全（不需要管理密钥）
+- ✅ 自动检测和使用
+- ✅ 零配置（在 Azure 环境中）
+- ✅ 符合企业安全标准
+
+**适用于**: Azure VM、Container Instances、App Service、AKS、Azure Functions
+
+**步骤**:
+
+1. **启用 Managed Identity**
+
+```bash
+# Azure VM (系统分配)
+az vm identity assign \
+    --name "your-vm-name" \
+    --resource-group "your-resource-group"
+
+# Azure Container Instances
+az container create \
+    --name "social-insight-container" \
+    --resource-group "your-resource-group" \
+    --image "your-image" \
+    --assign-identity
+
+# Azure App Service
+az webapp identity assign \
+    --name "your-app-name" \
+    --resource-group "your-resource-group"
+```
+
+2. **授予权限**
+
+```bash
+# 获取 Principal ID
+PRINCIPAL_ID=$(az vm show --name "your-vm" --resource-group "your-rg" --query identity.principalId -o tsv)
+
+# 授予 Cognitive Services User 角色
+az role assignment create \
+    --assignee $PRINCIPAL_ID \
+    --role "Cognitive Services User" \
+    --scope "/subscriptions/{sub-id}/resourceGroups/{rg}"
+```
+
+3. **配置环境变量**
+
+只需设置端点和模型名称（不需要密钥）：
+
+```bash
+AZURE_AI_PROJECT_ENDPOINT=https://your-project.api.azureml.ms
+AZURE_AI_MODEL_DEPLOYMENT_NAME=gpt-4
+
+# 可选：强制使用 Managed Identity
+USE_MANAGED_IDENTITY=true
+
+# 可选：用户分配的 Managed Identity
+AZURE_CLIENT_ID=your-user-assigned-identity-client-id
+```
+
+4. **运行测试**
+
+```bash
+./scripts/test_e2e.sh azure
+```
+
+**自动检测**: 代码会自动检测 Azure 环境并使用 Managed Identity，无需额外配置。
+
+#### 方法 2: Azure CLI（推荐本地开发）
 
 **优点**: 
 - ✅ 最安全（不需要管理密钥）

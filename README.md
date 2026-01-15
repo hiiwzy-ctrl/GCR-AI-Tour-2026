@@ -91,23 +91,53 @@ az login
 
 ### Azure 认证配置
 
-本项目支持多种认证方式。详细配置指南请参阅：
+本项目支持多种认证方式，**推荐在 Azure 环境中使用 Managed Identity**。详细配置指南请参阅：
 
 📖 **[Azure 认证配置指南](AZURE_CREDENTIALS.md)**
 
-快速配置：
+#### 快速配置（Managed Identity - 推荐生产环境）
+
+在 Azure VM、Container、App Service 等环境中，Managed Identity 会自动检测和使用：
 
 ```bash
-# 复制环境变量模板
-cp .env.example .env
+# 1. 在 Azure 资源上启用 Managed Identity
+az vm identity assign --name "your-vm" --resource-group "your-rg"
 
+# 2. 授予权限
+az role assignment create \
+    --assignee <managed-identity-principal-id> \
+    --role "Cognitive Services User" \
+    --scope /subscriptions/{sub-id}/resourceGroups/{rg}
+
+# 3. 设置环境变量（仅需端点和模型）
+export AZURE_AI_PROJECT_ENDPOINT=https://your-project.api.azureml.ms
+export AZURE_AI_MODEL_DEPLOYMENT_NAME=gpt-4
+
+# 4. 运行 - 无需 az login！
+./scripts/test_e2e.sh azure
+```
+
+#### 快速配置（Azure CLI - 本地开发）
+
+```bash
+# 1. Azure CLI 登录
+az login
+
+# 2. 配置环境变量
+cp .env.example .env
 # 编辑 .env 文件，填入你的 Azure 信息
 # AZURE_AI_PROJECT_ENDPOINT=https://your-project.api.azureml.ms
 # AZURE_AI_MODEL_DEPLOYMENT_NAME=gpt-4
 
-# 使用 Azure CLI 登录（推荐）
-az login
+# 3. 运行测试
+./scripts/test_e2e.sh azure
 ```
+
+**认证优先级**:
+1. **Managed Identity** (在 Azure 环境中自动使用)
+2. Azure CLI credentials (`az login`)
+3. 环境变量 (Service Principal)
+4. Azure Key Vault (企业场景)
 
 ### 步骤 1: 配置热点 API
 
