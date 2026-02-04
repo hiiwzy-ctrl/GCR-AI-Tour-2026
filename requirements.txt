@@ -1,10 +1,12 @@
 # Core runtime
-agent-framework
-agent-framework-azure-ai --pre
+--pre
+agent-framework==1.0.0b260114
+agent-framework-azure-ai==1.0.0b260114
 
 # Azure SDK
 azure-identity
-azure-ai-projects
+azure-ai-projects==2.0.0b3
+azure-ai-agents==1.2.0b5
 azure-core
 
 # Utilities
